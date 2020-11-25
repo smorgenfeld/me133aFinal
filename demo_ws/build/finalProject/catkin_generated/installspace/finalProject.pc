@@ -1,0 +1,8 @@
+prefix=/home/user/demo_ws/install
+
+Name: finalProject
+Description: Description of finalProject
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

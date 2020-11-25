@@ -1,0 +1,7 @@
+set(finalProject_SETUP_PY_SETUP_MODULE "distutils.core")
+set(finalProject_SETUP_PY_VERSION "0.0.0")
+set(finalProject_SETUP_PY_SCRIPTS "")
+set(finalProject_SETUP_PY_PACKAGES "hw6code")
+set(finalProject_SETUP_PY_PACKAGE_DIRS "lib/hw6code")
+set(finalProject_SETUP_PY_MODULES "")
+set(finalProject_SETUP_PY_MODULE_DIRS "")

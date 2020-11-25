@@ -1,0 +1,8 @@
+prefix=/home/user/demo_ws/install
+
+Name: demo133
+Description: Description of demo133
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

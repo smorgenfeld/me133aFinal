@@ -1,0 +1,8 @@
+prefix=/home/user/demo_ws/devel
+
+Name: hw6code
+Description: Description of hw6code
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

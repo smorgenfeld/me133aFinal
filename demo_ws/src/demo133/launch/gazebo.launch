@@ -1,0 +1,33 @@
+<launch>
+
+  <!-- You can overwrite this argument from the commmand line. -->
+  <arg name="model" default="$(find demo133)/urdf/fourR-gazebo.urdf"/>
+
+  <!-- These are arguments for Gazebo. -->
+  <arg name="paused"        default="false"/>
+  <arg name="use_sim_time"  default="true"/>
+  <arg name="gui"           default="true"/>
+  <arg name="headless"      default="false"/>
+  <arg name="debug"         default="false"/>
+
+  <!-- Launch Gazebo with the empty world. -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="debug"        value="$(arg debug)" />
+    <arg name="gui"          value="$(arg gui)" />
+    <arg name="paused"       value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless"     value="$(arg headless)"/>
+  </include>
+
+  <!-- Load the URDF into the ROS Parameter Server -->
+  <param name="robot_description" textfile="$(arg model)"/>
+
+  <!-- Service call to gazebo_ros to spawn a URDF robot -->
+  <node name="urdf_spawner"
+	pkg="gazebo_ros"
+	type="spawn_model"
+	respawn="false"
+	output="screen"
+	args="-urdf -model fourR -param robot_description -J theta2 1.57"/>
+
+</launch>

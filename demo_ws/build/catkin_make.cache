@@ -1,0 +1,2 @@
+atlas_description:demo133:finalProject:hw6code
+-DCATKIN_DEVEL_PREFIX=/home/user/demo_ws/devel -DCMAKE_INSTALL_PREFIX=/home/user/demo_ws/install -G Unix Makefiles

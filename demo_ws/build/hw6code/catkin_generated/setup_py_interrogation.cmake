@@ -1,0 +1,7 @@
+set(hw6code_SETUP_PY_SETUP_MODULE "distutils.core")
+set(hw6code_SETUP_PY_VERSION "0.0.0")
+set(hw6code_SETUP_PY_SCRIPTS "")
+set(hw6code_SETUP_PY_PACKAGES "hw6code")
+set(hw6code_SETUP_PY_PACKAGE_DIRS "lib/hw6code")
+set(hw6code_SETUP_PY_MODULES "")
+set(hw6code_SETUP_PY_MODULE_DIRS "")
