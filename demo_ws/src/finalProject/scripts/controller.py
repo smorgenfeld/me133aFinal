@@ -4,7 +4,7 @@
 #
 #   Publish:   /joint_states      sensor_msgs/JointState
 #
-import rospy, math, time, numpy as np
+import rospy, math, time, random, numpy as np
 
 from sensor_msgs.msg import JointState
 from kinematics import Kinematics
@@ -69,14 +69,14 @@ def Rz(theta):
                      [ 0            , 0             , 1 ]])
 
 
-def doPhysics(topPole, botPole, q, pos, N, dt):
+def doPhysics(topPole, botPole, q, pos, N, dt,p):
     ang = np.zeros((2,1));
     m = 1;
-    k = 500;
-    b = 2;
+    k = 1000;
+    b = math.pow(k,0.5);
     lgoal = 1;
     g = 9.81;
-    G = np.array([0,0,-g*m]).reshape((3,1))
+    G = np.array([p[0],p[1],p[2]-g*m]).reshape((3,1))
 
     # Get forward kinematics for top and bottom ends of the pole
     topRot = np.identity(3)
@@ -93,9 +93,8 @@ def doPhysics(topPole, botPole, q, pos, N, dt):
 
     # Tension (from 'pole' as very stiff spring)
     tVec = (np.matrix(pos[0:3]).reshape((3,1))-botPos) / lReal;
-    T = -k * (lReal - lgoal)* tVec #- (pos[3] * tVec[0,0] + pos[4] * tVec[1,0]+pos[5] * tVec[2,0]) * b;
-    #print(np.linalg.norm(np.matrix(pos[0:3]).reshape((3,1)) - topPos))
-    #print(abs(lReal - lgoal))
+    T = (-k * (lReal - lgoal) - (pos[3] * tVec[0,0] + pos[4] * tVec[1,0]+pos[5] * tVec[2,0]) * b) * tVec;
+    #print(lReal - lgoal)
 
     # Calculate acceleration (on simulated spring mass)
     A = (T + G) / m;
@@ -120,9 +119,10 @@ def doPhysics(topPole, botPole, q, pos, N, dt):
     return (ang, pos)
 
 def ikinPole(x, t0, error, robot, rnd, N):
+    # Pole position ikin
     original = t0.copy();
 
-    for i in range(1050):
+    for i in range(10):
         q = np.zeros((N,1))
         p = np.zeros((3,1))
         R = np.identity(3)
@@ -148,31 +148,9 @@ def ikinPole(x, t0, error, robot, rnd, N):
 
     return theta[7:]
 
-def ikinBot(x, rot, t0, error, robot, rnd, N):
-    for i in range(150):
-        q = np.zeros((N,1))
-        p = np.zeros((3,1))
-        R = np.identity(3)
-        J = np.zeros((6,N))
-        robot.Jac(t0, J)
-        JFixed = np.concatenate([J[3:6][3:6],J[0:3][0:3]])
-        robot.fkin(t0, p, R)
-        er1 = np.matrix(x).reshape(3,1)-p;
-        er2 = 0.5 * (np.cross(R[:,0].reshape((1,3)), rot[:,0].reshape((1,3))) + np.cross(R[:,1].reshape((1,3)) , rot[:,1].reshape((1,3))) + np.cross(R[:,2].reshape((1,3)), rot[:,2].reshape((1,3))));
-        er2 = er2.reshape((3,1))
+def clamp(n, s, l): return max(s, min(n, l));
 
-        er = np.concatenate([er1,er2]);
-        print(J)
-        t0 = t0 + np.linalg.pinv(J) * er;
-        if np.linalg.norm(er) < error:
-            break;
-    theta = t0;
-
-    # Clamp angle within 2pi (having large angles gives me anxiety)
-    if rnd:
-        for i in range(N):
-            theta[i]=theta[i]%(2 * np.pi);
-    return theta
+def getStoppingDist(v, a, x): return v*x-a/2*x**2;
 
 
 if __name__ == "__main__":
@@ -200,10 +178,10 @@ if __name__ == "__main__":
     msg.name.append('theta9')
 
     repeating = True;
-    swingDemo = True;
+    swingDemo = False;
 
     # Prepare a servo loop at 100Hz.
-    rate  = 100;
+    rate  = 1000;
     servo = rospy.Rate(rate)
     dt    = servo.sleep_dur.to_sec()
     rospy.loginfo("Running the servo loop with dt of %f seconds (%fHz)" %
@@ -221,37 +199,68 @@ if __name__ == "__main__":
     R = np.matrix([[1,0,0],[0,1,0],[0,0,1]]);
 
     q = np.matrix([0.1,0.1,0.1,0.1,0.1,0.1,0.1,np.pi,0.1]).reshape((N,1));
-    #q1 = ikinBot([0,0.25,0.6], R1, q[0:7], 0.01, tipKin, True, N-2)
-    #q[0:7] = q1
-    
 
     # Set cartesian coords for simulated mass
-    pos = [0,0,1.6,0,0,0]
+    pos = [0,0.1,1.6,0,0,0]
     if swingDemo:
         pos = [0,0,-0.6,0,0,0]
 
-    #topRot = np.identity(3)
-    #topPos = np.zeros((3,1))
-    #topKin.fkin(q, topPos, topRot);
-    #pos[0] = topPos[0,0]
-    #pos[1] = topPos[1,0]
-    #pos[2] = topPos[2,0]
-    
+    # Pole perturbation constants
+    f = 0;
+    perturbFreq = 5000;
+    perturbLength = 50;
+    perturbAng = 0;
+    perturbMag = 15;
+
+    # Tip accel constraint constants (not working atm)
+    x = [0,0];
+    xp = [0,0];
+    goalX = [0,0];
+    curV = [0,0];
+    maxAccel = 0.04;
+    maxSpeed = 0.4;
+    armRange = 0.5;
+    tipRot = np.identity(3)
+    tipPos = np.zeros((3,1))
+
+    # Sleep a bit so rviz starts before robot starts moving/failing
+    time.sleep(3)
+
     while not rospy.is_shutdown():
 
         # Move to a new time step, assuming a constant step
         t = t + dt
 
+        # Perturb the top of the pole in a random direction
+        f += 1
+        p = [0,0,0]
+        if f >= perturbFreq:
+            if (f > perturbFreq + perturbLength):
+                f = 0
+            elif (f == perturbFreq):
+                perturbAng = random.random() * 2 * np.pi;
+                print("perturbed")
+            p = [perturbMag * np.sin(perturbAng),perturbMag * np.cos(perturbAng),0]
+            
+
         # Do pole physics
-        q89, pos = doPhysics(topKin, tipKin, q, pos, N, dt)
+        q89, pos = doPhysics(topKin, tipKin, q, pos, N, dt, p)
         q[7] = q89[0,0];
         q[8] = q89[1,0];
 
-        # Try? to catch the pole (DOES NOT WORK!!!)
-        a = 2;
-        b = 10;
-        x = [pos[0] + a * pos[3],pos[1] + a * pos[4],0.6]
-        xp = [b * pos[3],b * pos[4],0]
+        # Try? to catch the pole (WORKS!!!)
+        a = 0.1;
+        b = 3;
+        topKin.fkin(q, tipPos, tipRot)
+        goalX = [clamp(pos[0] + a * pos[3] + b*(pos[0] / armRange)**3,-armRange,armRange),clamp(pos[1] + a * pos[4]+ b*(pos[1] / armRange)**3,-armRange,armRange)]
+
+        # Me trying to constrain the tip to a max accelration (not currently working)
+        #A = [maxAccel * np.sign(curV[0]),maxAccel * np.sign(curV[1])]
+        #curV = [clamp(curV[0] + maxAccel * np.sign(goalX[0] - (tipPos[0] + getStoppingDist(curV[0], A[0], curV[0]/A[0]))),-maxSpeed,maxSpeed),clamp(curV[0] + maxAccel * np.sign(goalX[0] - (tipPos[0] + getStoppingDist(curV[0], A[0], curV[0]/A[0]))),-maxSpeed,maxSpeed)]
+        #x = [clamp(x[0] + curV[0],-armRange,armRange),clamp(x[1] + curV[1],-armRange,armRange),0.6]
+        #print([x[0] - goalX[0],x[1] - goalX[1]])
+        x = [goalX[0],goalX[1],0.6]
+        xp = [1,1,0];
 
         # Demo the pendulum physics (THIS DOES WORK!!!)
         if swingDemo:
