@@ -15,7 +15,7 @@ from kinematics import Kinematics
 #
 
 def ikinVel(x, xp, rot, t0, robot, rnd, N, dt):
-
+    # Calculate angles for each joint, aiming for a goal position and velocity.
     q = np.zeros((N,1))
     qdot = np.zeros((N,1))
     p = np.zeros((3,1))
@@ -43,30 +43,6 @@ def ikinVel(x, xp, rot, t0, robot, rnd, N, dt):
             theta[i]=theta[i]%(2*np.pi);
     return theta
 
-def bound(arr, ind, lbound, hbound, changeAmount):
-    changed = 0;
-    if arr[ind] <= lbound:
-        arr[ind] += changeAmount * min(2,abs(arr[ind] - lbound));
-        changed = 1;
-    elif arr[ind] >= hbound:
-        arr[ind] -= changeAmount * min(2,abs(arr[ind] - hbound));
-        changed = 1;
-    return changed;
-
-def Rx(theta):
-    return np.matrix([[ 1, 0            , 0            ],
-                     [ 0, np.cos(theta),-np.sin(theta)],
-                     [ 0, np.sin(theta), np.cos(theta)]])
-
-def Ry(theta):
-    return np.matrix([[ np.cos(theta), 0, np.sin(theta)],
-                     [ 0            , 1, 0            ],
-                     [-np.sin(theta), 0, np.cos(theta)]])
-
-def Rz(theta):
-    return np.matrix([[ np.cos(theta), -np.sin(theta), 0 ],
-                     [ np.sin(theta), np.cos(theta) , 0 ],
-                     [ 0            , 0             , 1 ]])
 
 
 def doPhysics(topPole, botPole, q, pos, N, dt,p):
@@ -111,12 +87,11 @@ def doPhysics(topPole, botPole, q, pos, N, dt,p):
     # Fake point for robot to move to
     fpos = botPos + lgoal * (np.matrix(pos[0:3]).reshape((3,1)) - botPos) / np.linalg.norm(lgoal * (np.matrix(pos[0:3]).reshape((3,1)) - botPos));
 
-
+    # Get goal angle for next timestep
     ang = ikinPole(fpos, q, 0.01, topPole, True, N)
 
-    # Get goal angle for next timestep
-
     return (ang, pos)
+
 
 def ikinPole(x, t0, error, robot, rnd, N):
     # Pole position ikin
@@ -180,7 +155,7 @@ if __name__ == "__main__":
     repeating = True;
     swingDemo = False;
 
-    # Prepare a servo loop at 100Hz.
+    # Prepare a servo loop at 1000Hz.
     rate  = 1000;
     servo = rospy.Rate(rate)
     dt    = servo.sleep_dur.to_sec()
@@ -207,8 +182,8 @@ if __name__ == "__main__":
 
     # Pole perturbation constants
     f = 0;
-    perturbFreq = 5000;
-    perturbLength = 50;
+    perturbFreq = 5000;    # Occurs every perturbFreq time steps
+    perturbLength = 50;    # Wait time for robot to move to perturbed location
     perturbAng = 0;
     perturbMag = 15;
 
@@ -219,7 +194,7 @@ if __name__ == "__main__":
     curV = [0,0];
     maxAccel = 0.04;
     maxSpeed = 0.4;
-    armRange = 0.5;
+    armRange = 0.6;
     tipRot = np.identity(3)
     tipPos = np.zeros((3,1))
 
@@ -259,7 +234,7 @@ if __name__ == "__main__":
         #curV = [clamp(curV[0] + maxAccel * np.sign(goalX[0] - (tipPos[0] + getStoppingDist(curV[0], A[0], curV[0]/A[0]))),-maxSpeed,maxSpeed),clamp(curV[0] + maxAccel * np.sign(goalX[0] - (tipPos[0] + getStoppingDist(curV[0], A[0], curV[0]/A[0]))),-maxSpeed,maxSpeed)]
         #x = [clamp(x[0] + curV[0],-armRange,armRange),clamp(x[1] + curV[1],-armRange,armRange),0.6]
         #print([x[0] - goalX[0],x[1] - goalX[1]])
-        x = [goalX[0],goalX[1],0.6]
+        x = [goalX[0],goalX[1],1.0]
         xp = [1,1,0];
 
         # Demo the pendulum physics (THIS DOES WORK!!!)
