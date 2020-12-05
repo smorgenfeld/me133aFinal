@@ -127,6 +127,27 @@ def clamp(n, s, l): return max(s, min(n, l));
 
 def getStoppingDist(v, a, x): return v*x-a/2*x**2;
 
+def getQuintic(x0,v0,a0,x1,v1,a1,maxAccel,dt):
+    # Scale time to x1 to constrain max acceleration (doesn't work)
+    #t = 2.4 * (abs(x1-x0)/maxAccel)**0.5;
+    t = dt * 25
+
+    # Calculate coefficients of quintic function
+    a = (-t*(a0*t-a1*t+6*(v0+v1))+12*(x1-x0))/(2*t**5)
+    b = (t*(3*a0*t-3*a1*t+16*v0+14*v1)+30*(x0-x1))/(2*t**4)
+    c = (t*(-3*a0*t+a1*t-12*v0-8*v1)+20*(x1-x0))/(2*t**3)
+    d = a0/2
+    e = v0
+    f = x0
+
+    # Calculate position/velocity/acceleration at next time step
+    # These will be fed back into this function next time step to continue 
+    # the quintic motion
+    x01 = a*dt**5  +  b*dt**4+    c*dt**3+   d*dt**2+ e*dt+ f;
+    v01 = 5*a*dt**4+  4*b*dt**3+  3*c*dt**2+ 2*d*dt+  e;
+    a01 = 20*a*dt**3+ 12*b*dt**2+ 6*c*dt+    2*d;
+
+    return [x01, v01, a01];
 
 if __name__ == "__main__":
     # Prepare the node.
@@ -152,7 +173,13 @@ if __name__ == "__main__":
     msg.name.append('theta8')
     msg.name.append('theta9')
 
+    # Time constants
+    t   = 0.0
+    tf  = 2 * math.pi;
+
+    # Set repeating to false to run sim for length tf
     repeating = True;
+    # Set swingDemo to True for pendulum physics demos
     swingDemo = False;
 
     # Prepare a servo loop at 1000Hz.
@@ -162,17 +189,14 @@ if __name__ == "__main__":
     rospy.loginfo("Running the servo loop with dt of %f seconds (%fHz)" %
                   (dt, rate))
 
-
-    # Run the servo loop until shutdown (killed or ctrl-C'ed).
-    t   = 0.0
-    tf  = 2 * math.pi;
+    # Assign kinematics constants
     urdf = rospy.get_param('/robot_description');
     tipKin = Kinematics(urdf, 'world', 'tip');
     topKin = Kinematics(urdf, 'world', 'end');
-
-    N   = topKin.dofs()
+    N = topKin.dofs()
     R = np.matrix([[1,0,0],[0,1,0],[0,0,1]]);
 
+    # Set initial joint angle guess
     q = np.matrix([0.1,0.1,0.1,0.1,0.1,0.1,0.1,np.pi,0.1]).reshape((N,1));
 
     # Set cartesian coords for simulated mass
@@ -181,42 +205,46 @@ if __name__ == "__main__":
         pos = [0,0,-0.6,0,0,0]
 
     # Pole perturbation constants
-    f = 0;
+    pTimer = 0;
     perturbFreq = 5000;    # Occurs every perturbFreq time steps
-    perturbLength = 50;    # Wait time for robot to move to perturbed location
-    perturbAng = 0;
-    perturbMag = 15;
+    perturbLength = 50;    # Number of timesteps that perturbMag force is applied
+    perturbAng = 0;        # Placeholder for random force angle
+    perturbMag = 25;       # Magnitude of force
 
-    # Tip accel constraint constants (not working atm)
+    # Tip accel constraint constants
     x = [0,0];
     xp = [0,0];
     goalX = [0,0];
     curV = [0,0];
-    maxAccel = 0.04;
-    maxSpeed = 0.4;
-    armRange = 0.6;
+    curA = [0,0];
+    armRange = 0.75;       # Robot's reach (any further and it will hit a singularity)
     tipRot = np.identity(3)
     tipPos = np.zeros((3,1))
+
+    # Constant to scale overshoot bias
+    a = 0.1
+    # Constant to scale centering bias
+    b = 3
 
     # Sleep a bit so rviz starts before robot starts moving/failing
     time.sleep(3)
 
+    # Run the servo loop until shutdown (killed or ctrl-C'ed).
     while not rospy.is_shutdown():
 
         # Move to a new time step, assuming a constant step
         t = t + dt
 
         # Perturb the top of the pole in a random direction
-        f += 1
+        pTimer += 1
         p = [0,0,0]
-        if f >= perturbFreq:
-            if (f > perturbFreq + perturbLength):
-                f = 0
+        if pTimer >= perturbFreq:
+            p = [perturbMag * np.sin(perturbAng),perturbMag * np.cos(perturbAng),0]
+            if (pTimer > perturbFreq + perturbLength):
+                pTimer = 0 # Reset perturb timer
             elif (f == perturbFreq):
                 perturbAng = random.random() * 2 * np.pi;
-                print("perturbed")
-            p = [perturbMag * np.sin(perturbAng),perturbMag * np.cos(perturbAng),0]
-            
+                print("Perturbed in" + str(p))
 
         # Do pole physics
         q89, pos = doPhysics(topKin, tipKin, q, pos, N, dt, p)
@@ -224,20 +252,33 @@ if __name__ == "__main__":
         q[8] = q89[1,0];
 
         # Try? to catch the pole (WORKS!!!)
-        a = 0.1;
-        b = 3;
-        topKin.fkin(q, tipPos, tipRot)
-        goalX = [clamp(pos[0] + a * pos[3] + b*(pos[0] / armRange)**3,-armRange,armRange),clamp(pos[1] + a * pos[4]+ b*(pos[1] / armRange)**3,-armRange,armRange)]
 
-        # Me trying to constrain the tip to a max accelration (not currently working)
-        #A = [maxAccel * np.sign(curV[0]),maxAccel * np.sign(curV[1])]
-        #curV = [clamp(curV[0] + maxAccel * np.sign(goalX[0] - (tipPos[0] + getStoppingDist(curV[0], A[0], curV[0]/A[0]))),-maxSpeed,maxSpeed),clamp(curV[0] + maxAccel * np.sign(goalX[0] - (tipPos[0] + getStoppingDist(curV[0], A[0], curV[0]/A[0]))),-maxSpeed,maxSpeed)]
-        #x = [clamp(x[0] + curV[0],-armRange,armRange),clamp(x[1] + curV[1],-armRange,armRange),0.6]
-        #print([x[0] - goalX[0],x[1] - goalX[1]])
-        x = [goalX[0],goalX[1],1.0]
-        xp = [1,1,0];
+        # Get the current position of the robot tip
+        tipPos = np.zeros((3,1))
+        tipKin.fkin(q, tipPos, tipRot)
+        tipPos = [tipPos[0,0],tipPos[1,0],tipPos[2,0]]
 
-        # Demo the pendulum physics (THIS DOES WORK!!!)
+        # Figure out where we want the tip to be, in order to balance the pendulum and bring it back towards the center
+        goalX = [pos[0] + a * pos[3] + b*(pos[0] / armRange)**3,pos[1] + a * pos[4]+ b*(pos[1] / armRange)**3]
+        # Constrain goal position within circular workspace of radius armRange
+        goalX = [min(1,armRange / np.linalg.norm(goalX)) * goalX[0],min(1,armRange / np.linalg.norm(goalX)) * goalX[1]]
+
+        # Get the next position/velocity/acceleration using a quintic function
+        Xpos = getQuintic(tipPos[0],curV[0],curA[0],goalX[0],0,0,maxAccel,dt)
+        Ypos = getQuintic(tipPos[1],curV[1],curA[1],goalX[1],0,0,maxAccel,dt)
+
+        # Save new position, velocity and acceleration (scaling position to stay within circular workspace)
+        goalPos = [min(1,armRange / np.linalg.norm([Xpos[0],Ypos[0]])) * Xpos[0],min(1,armRange / np.linalg.norm([Xpos[0],Ypos[0]])) * Ypos[0]]
+        Xpos[0] = goalPos[0]
+        Ypos[0] = goalPos[1]
+        curV = [Xpos[1], Ypos[1]]
+        curA = [Xpos[2], Ypos[2]]
+
+        # Assign new position and velocity goals for ikin function
+        x = [goalPos[0],goalPos[1],1.0]
+        xp = [curV[0],curV[1],0];
+
+        # Demo the pendulum physics
         if swingDemo:
             x = [np.sin(4*t)/4,np.cos(4*t)/4,0.6]
             xp = [np.cos(4*t),-np.sin(4*t),0]
@@ -253,6 +294,7 @@ if __name__ == "__main__":
         servo.sleep()
 
         # Break if we have completed the full time.
+        # Doesn't do anything if repeating is set to false.
         if (t > tf):
             if repeating:
                 t = 0
