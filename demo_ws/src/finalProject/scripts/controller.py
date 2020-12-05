@@ -127,7 +127,7 @@ def clamp(n, s, l): return max(s, min(n, l));
 
 def getStoppingDist(v, a, x): return v*x-a/2*x**2;
 
-def getQuintic(x0,v0,a0,x1,v1,a1,maxAccel,dt):
+def getQuintic(x0,v0,a0,x1,v1,a1,dt):
     # Scale time to x1 to constrain max acceleration (doesn't work)
     #t = 2.4 * (abs(x1-x0)/maxAccel)**0.5;
     t = dt * 25
@@ -242,7 +242,7 @@ if __name__ == "__main__":
             p = [perturbMag * np.sin(perturbAng),perturbMag * np.cos(perturbAng),0]
             if (pTimer > perturbFreq + perturbLength):
                 pTimer = 0 # Reset perturb timer
-            elif (f == perturbFreq):
+            elif (pTimer == perturbFreq):
                 perturbAng = random.random() * 2 * np.pi;
                 print("Perturbed in" + str(p))
 
@@ -264,8 +264,8 @@ if __name__ == "__main__":
         goalX = [min(1,armRange / np.linalg.norm(goalX)) * goalX[0],min(1,armRange / np.linalg.norm(goalX)) * goalX[1]]
 
         # Get the next position/velocity/acceleration using a quintic function
-        Xpos = getQuintic(tipPos[0],curV[0],curA[0],goalX[0],0,0,maxAccel,dt)
-        Ypos = getQuintic(tipPos[1],curV[1],curA[1],goalX[1],0,0,maxAccel,dt)
+        Xpos = getQuintic(tipPos[0],curV[0],curA[0],goalX[0],0,0,dt)
+        Ypos = getQuintic(tipPos[1],curV[1],curA[1],goalX[1],0,0,dt)
 
         # Save new position, velocity and acceleration (scaling position to stay within circular workspace)
         goalPos = [min(1,armRange / np.linalg.norm([Xpos[0],Ypos[0]])) * Xpos[0],min(1,armRange / np.linalg.norm([Xpos[0],Ypos[0]])) * Ypos[0]]
